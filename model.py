@@ -6,10 +6,14 @@ from torch import Tensor, nn
 from torch.nn.attention.flex_attention import flex_attention, create_block_mask, BlockMask
 
 
+create_block_mask = torch.compile(create_block_mask, dynamic=False)
+flex_attention = torch.compile(flex_attention, dynamic=False)
+
+
 @dataclass
 class GPTConfig:
     vocab_size: int = 50_257
-    bos_token_id: int = 50_256
+    bos_id: int = 50_256
     num_layers: int = 12
     num_heads: int = 6
     model_dim: int = 768
@@ -49,9 +53,9 @@ class Rotary(nn.Module):
         self.cos = nn.Buffer(theta.cos(), persistent=False)
         self.sin = nn.Buffer(theta.sin(), persistent=False)
 
-    def forward(self, x_BTHD: Tensor):
-        assert self.cos.size(0) >= x_BTHD.size(-3)
-        cos, sin = self.cos[None, :x_BTHD.size(-3), None, :], self.sin[None, :x_BTHD.size(-3), None, :]
+    def forward(self, x_BTHD: Tensor, pos_id: Tensor):
+        assert self.cos.size(0) > pos_id.max()
+        cos, sin = self.cos[pos_id, None, :], self.sin[pos_id, None, :]
         x1, x2 = x_BTHD.to(dtype=torch.float32).chunk(2, dim=-1)
         y1 = x1 * cos + x2 * sin
         y2 = x1 * (-sin) + x2 * cos
@@ -77,7 +81,7 @@ class CausalSelfAttention(nn.Module):
             "BLOCK_M2": 64, "BLOCK_N2": 32,
         }
 
-    def forward(self, x: Tensor, v_residual: Tensor | None, block_mask: BlockMask):
+    def forward(self, x: Tensor, v_residual: Tensor | None, pos_id: Tensor, block_mask: BlockMask):
         B, T = x.size(0), x.size(1)
         assert B == 1, "Must use batch size = 1 for FlexAttention"
 
@@ -86,7 +90,7 @@ class CausalSelfAttention(nn.Module):
         v = self.c_v(x).view(B, T, self.config.num_heads, -1)
 
         # norm and rotary
-        q, k = self.rotary(norm(q)), self.rotary(norm(k))
+        q, k = self.rotary(norm(q), pos_id), self.rotary(norm(k), pos_id)
 
         # initialize residual on first pass
         v_residual = v_residual if v_residual is not None else v
@@ -123,9 +127,9 @@ class Block(nn.Module):
         self.mlp = MLP(config)
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
-    def forward(self, x: Tensor, v_residual: Tensor, x0: Tensor, block_mask: BlockMask):
+    def forward(self, x: Tensor, v_residual: Tensor, x0: Tensor, pos_id: Tensor, block_mask: BlockMask):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
-        x1, v_residual = self.attn(F.rms_norm(x, (x.size(-1),)), v_residual, block_mask)
+        x1, v_residual = self.attn(F.rms_norm(x, (x.size(-1),)), v_residual, pos_id, block_mask)
         x = x + x1
         x = x + self.mlp(F.rms_norm(x, (x.size(-1),)))
         return x, v_residual
@@ -168,7 +172,7 @@ class GPT(nn.Module):
         for i, block in enumerate(self.blocks):
             if i >= n:
                 x = x + self.skip_w[i - n] * skip_conns.pop()
-            x, v_residual = block(x, v_residual, x0, block_mask)
+            x, v_residual = block(x, v_residual, x0, pos_id, block_mask)
             if i < n:
                 skip_conns.append(x)
 
