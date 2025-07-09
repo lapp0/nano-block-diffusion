@@ -38,18 +38,19 @@ torchrun --standalone --nproc_per_node=$(nvidia-smi -L | wc -l) train.py
 |------------------------------------------------------------------|-------------------|--------------|------------|--------------------------------|
 | Paper[^1]                                                        |                   | 65,000M      | 05/17/2025 | Table 3, 30.60 PPL on **LM1B** |
 | Nano Block Diffusion v0                                          |                   |              | 07/09/2025 | Original release               |
-| [New Record](https://github.com/lapp0/nano-block-diffusion/pulls |                   |              |            |                                |
+| [New Record](https://github.com/lapp0/nano-block-diffusion/pulls) |                   |              |            |                                |
 
 PRs which improve the models training performance are encouraged. Block Diffusion models are new and underexplored.
 
 **New Record Rules**
 * **Parameter limit**: Use ≤ 162M parameters (including embeddings).
 * **Target**: Achieve ≤ 3.44 cross-entropy loss on FineWebEdu validation set.
-* **Data**: Must use FineWeb dataset. Sample order are fixed. Samples cannot be repeated. Sample size per batch may vary.
+* **Data**: Must use FineWeb-Edu dataset. Sample order are fixed. Samples cannot be repeated. Sample size per batch may vary.
 * **Objective:** Must retain the same objective function and retain 16 token denoising block.
 
 ## Citations
 
 [^1]: [Arriola, M., Gokaslan, A., Chiu, J.T., Yang, Z., Qi, Z., Han, J., Sahoo, S.S., Kuleshov, V. (2025). Block Diffusion: Interpolating Between Autoregressive and Diffusion Language Models. arXiv preprint arXiv:2503.09573.](https://arxiv.org/abs/2503.09573)
+
 [^2]: [Keller Jordan et al. *modded-nanogpt: Speedrunning the NanoGPT baseline*.](https://github.com/KellerJordan/modded-nanogpt/)
 - Note: many improvements in `model.py` are from modded-nanogpt, however, comments attributing the discovering author have been removed to keep the codebase clean. To view each improvements discovering author comment, see [modded-nanogpt's train_gpt.py](https://github.com/KellerJordan/modded-nanogpt/blob/master/train_gpt.py)
