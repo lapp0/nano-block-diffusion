@@ -150,8 +150,6 @@ def print0(s: str, console: bool = False):
 
 
 # dump the training script
-with open(sys.argv[0]) as f:
-    code = f.read()
 print0(code)
 print0("=" * 100)
 print0(f"Python {sys.version}")
