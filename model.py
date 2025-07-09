@@ -74,7 +74,7 @@ class CausalSelfAttention(nn.Module):
         self.c_q = CastedLinear(config.model_dim, config.model_dim)
         self.c_k = CastedLinear(config.model_dim, config.model_dim)
         self.c_v = CastedLinear(config.model_dim, config.model_dim)
-        self.o_proj = CastedLinear(config.num_heads * config.head_dim, config.model_dim, zero_init=True)
+        self.o_proj = CastedLinear(config.num_heads * config.head_dim, config.model_dim)
 
         self.rotary = Rotary(config.head_dim, config.max_seq_len)
         self.lamb = nn.Parameter(torch.tensor(0.5))
