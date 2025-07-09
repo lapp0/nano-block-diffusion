@@ -10,8 +10,7 @@ import torch
 import torch.distributed as dist
 
 from muon import Muon
-
-from model import GPT, GPTConfig
+from model import BlockGPT, BlockGPTConfig
 
 
 code = "\n".join([
@@ -73,17 +72,14 @@ def distributed_data_generator(
     tokens, pos = _load_data_shard(next(file_iter)), 0
 
     while True:
-        if pos + batch_size + 1 >= len(tokens):
+        if pos + batch_size >= len(tokens):
             tokens, pos = _load_data_shard(next(file_iter)), 0
         buf = tokens[pos + rank * local_bs :][: local_bs + 1]
         inputs = buf[:-1].to(
             device="cuda", dtype=torch.int32, non_blocking=True
         )
-        targets = buf[1:].to(
-            device="cuda", dtype=torch.int64, non_blocking=True
-        )
         pos += batch_size
-        yield inputs, targets
+        yield inputs
 
 
 # -----------------------------------------------------------------------------
@@ -96,16 +92,16 @@ def evaluate(model, loader, steps):
     total = 0.0
     with torch.no_grad():
         for _ in range(steps):
-            x, y = next(loader)
-            total += model(x, y)
+            x = next(loader)
+            total += model(x)
     return total / steps
 
 
 def train_step(model, loader, step, optimizers, optimizer2, accum_steps):
     # forward/backward accumulation
     for _ in range(accum_steps):
-        x, y = next(loader)
-        loss = model(x, y)
+        x = next(loader)
+        loss = model(x)
         loss.backward()
 
     # gradient all‐reduce across ranks
@@ -167,7 +163,7 @@ print0(os.popen("nvidia-smi").read())
 print0("=" * 100)
 
 
-model = GPT(GPTConfig()).cuda()
+model = BlockGPT(BlockGPTConfig()).cuda()
 
 for m in model.modules():
     if isinstance(m, torch.nn.Embedding):

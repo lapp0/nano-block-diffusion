@@ -11,15 +11,19 @@ flex_attention = torch.compile(flex_attention, dynamic=False)
 
 
 @dataclass
-class GPTConfig:
-    vocab_size: int = 50_257
+class BlockGPTConfig:
+    vocab_size: int = 50_258
     bos_id: int = 50_256
+    mask_id: int = 50_257
     num_layers: int = 12
     num_heads: int = 6
     model_dim: int = 768
     max_seq_len: int = 131_072  # 2**17
     head_dim: int = 128
     intermediate_dim: int | None = None
+    diffusion_block_size: int = 16
+    t_lower: float = 0.3
+    t_upper: float = 0.8
 
 
 def norm(x):
@@ -63,7 +67,7 @@ class Rotary(nn.Module):
 
 
 class CausalSelfAttention(nn.Module):
-    def __init__(self, config: GPTConfig):
+    def __init__(self, config: BlockGPTConfig):
         super().__init__()
         self.config = config
 
@@ -107,7 +111,7 @@ class CausalSelfAttention(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, config: GPTConfig):
+    def __init__(self, config: BlockGPTConfig):
         super().__init__()
         intermediate_dim = config.intermediate_dim or 4 * config.model_dim
         self.in_proj = CastedLinear(config.model_dim, intermediate_dim)
@@ -121,7 +125,7 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, config: GPTConfig):
+    def __init__(self, config: BlockGPTConfig):
         super().__init__()
         self.attn = CausalSelfAttention(config)
         self.mlp = MLP(config)
@@ -135,8 +139,8 @@ class Block(nn.Module):
         return x, v_residual
 
 
-class GPT(nn.Module):
-    def __init__(self, config: GPTConfig):
+class BlockGPT(nn.Module):
+    def __init__(self, config: BlockGPTConfig):
         super().__init__()
         self.config = config
 
@@ -149,25 +153,53 @@ class GPT(nn.Module):
         assert len(self.blocks) % 2 == 0
         self.skip_w = nn.Parameter(torch.ones(len(self.blocks) // 2))
 
-    def create_blockmask(self, input_seq: Tensor):
-        docs = (input_seq == self.config.bos_token_id).cumsum(0)
+    def create_blockmask(self, doc_id: Tensor, pos_id: Tensor):
+        """BlockMask for attn rules from https://arxiv.org/pdf/2503.09573 section 3.1"""
+        L = len(doc_id)
 
-        def document_causal_mask(b, h, q_idx, kv_idx):
-            causal_mask = q_idx >= kv_idx
-            document_mask = docs[q_idx] == docs[kv_idx]
-            return causal_mask & document_mask  # & window_mask
+        block_id = pos_id // self.config.diffusion_block_size + doc_id * L
+        block_id = torch.cumsum(block_id != block_id.roll(1, 0), 0) - 1
 
-        S = len(input_seq)
-        return create_block_mask(document_causal_mask, None, None, S, S, device="cuda", _compile=True)
+        block_id, doc_id = block_id.repeat(2), doc_id.repeat(2)
+        noisy = torch.arange(2 * L, device=doc_id.device) < L
 
-    def forward(self, input_seq: Tensor, target_seq: Tensor):
+        def block_diffusion_mask(b, h, q, kv):
+            # mask from section 3.1 of https://arxiv.org/pdf/2503.09573
+            blk_q, blk_kv = block_id[q], block_id[kv]
+
+            bd = (blk_q == blk_kv) & (noisy[q] == noisy[kv])  # Block Diagonal
+            obc = (blk_q > blk_kv) & noisy[q] & (~noisy[kv])  # Offset Block Causal
+            bc = (blk_q >= blk_kv) & (~noisy[q]) & (~noisy[kv])  # Block Causal
+
+            same_doc = doc_id[q] == doc_id[kv]
+            return same_doc & (bd | obc | bc)
+
+        S = 2 * L
+        return create_block_mask(block_diffusion_mask, None, None, S, S)
+
+    def forward(self, input_seq: Tensor):
         assert input_seq.ndim == 1
 
-        x = x0 = norm(self.embed(input_seq)[None])
+        # construct attention rules & block mask
+        doc_id = (input_seq == self.config.bos_id).cumsum(0)
+        p = torch.arange(input_seq.size(0), device=input_seq.device)
+        pos_id = p - torch.where(input_seq == self.config.bos_id, p, -1).cummax(0).values
+        block_mask = self.create_blockmask(doc_id, pos_id)
+
+        # Apply noise to sequence
+        noise_range = (self.config.t_lower, self.config.t_upper) if self.training else (0.0, 1.0)
+        rand = torch.rand_like(input_seq, dtype=torch.float32)
+        t = torch.empty_like(rand).uniform_(*noise_range)[doc_id]
+        noisy_seq = input_seq.masked_fill(rand >= (1 - t), self.config.mask_id)
+
+        # Concat noisy + clean into seq and repeat pos_ids
+        seq = torch.cat([noisy_seq, input_seq], dim=0)
+        pos_id = pos_id.repeat(2)
+
+        # Embedding & U-net backbone forward
+        x = x0 = norm(self.embed(seq)[None])
         v_residual = None
 
-        # U-net design
-        block_mask = self.create_blockmask(input_seq)
         skip_conns, n = [], len(self.skip_w)
         for i, block in enumerate(self.blocks):
             if i >= n:
@@ -176,11 +208,16 @@ class GPT(nn.Module):
             if i < n:
                 skip_conns.append(x)
 
+        x = x[:, :input_seq.size(0)]  # Get logits for noisy tokens only
         x = norm(x)
         logits = self.lm_head(x).float()
 
-        # tanh softcapping
-        logits = 30 * torch.sigmoid(logits / (7.5 * x.size(-1)**0.5))
-        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), target_seq, reduction='sum' if self.training else 'mean')
-
-        return loss
+        # Get loss for masked tokens
+        mask = (noisy_seq == self.config.mask_id)
+        targets = torch.where(mask, input_seq, torch.full_like(input_seq, -100))
+        losses = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), reduction='none')
+        if self.training:
+            weights = (1.0 / (t + 1e-4)).type_as(logits)
+            return (losses * weights * mask).sum() / mask.sum()
+        else:
+            return (losses * mask).sum() / mask.sum()
