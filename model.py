@@ -18,7 +18,7 @@ class BlockGPTConfig:
     num_layers: int = 12
     num_heads: int = 6
     model_dim: int = 768
-    max_seq_len: int = 131_072  # 2**17
+    max_seq_len: int = int(2**15)
     head_dim: int = 128
     intermediate_dim: int | None = None
     diffusion_block_size: int = 16
@@ -80,9 +80,9 @@ class CausalSelfAttention(nn.Module):
         self.lamb = nn.Parameter(torch.tensor(0.5))
 
         self.kernel_options = {
-            "BLOCK_M": 64, "BLOCK_N": 64,
-            "BLOCK_M1": 32, "BLOCK_N1": 64,
-            "BLOCK_M2": 64, "BLOCK_N2": 32,
+            "BLOCK_M": 32, "BLOCK_N": 32,
+            "BLOCK_M1": 16, "BLOCK_N1": 32,
+            "BLOCK_M2": 32, "BLOCK_N2": 16,
         }
 
     def forward(self, x: Tensor, v_residual: Tensor | None, pos_id: Tensor, block_mask: BlockMask):

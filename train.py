@@ -30,10 +30,9 @@ class Hyperparameters:
     train_files = "data/fineweb10B/fineweb_train_*.bin"
     val_files = "data/fineweb10B/fineweb_val_*.bin"
     val_tokens = 10_485_760
-    train_seq_len = 48 * 1024 // 2
-    val_seq_len = 4 * 64 * 1024 // 2
-    grad_accum_steps_per_device = (8 // int(os.environ["WORLD_SIZE"])) * 2
-    num_iterations = 1700
+    train_seq_len = 16 * 1024
+    val_seq_len = 64 * 1024
+    grad_accum_steps_per_device = (8 // int(os.environ["WORLD_SIZE"]))
     cooldown_frac = 0.4
     vocab_size = 50_257
     val_loss_every = 125
@@ -183,9 +182,9 @@ scalar_params = [p for p in model.parameters() if p.ndim < 2]
 head_params = [model.lm_head.weight]
 
 adam_params = [
-    dict(params=head_params, lr=0.22),
-    dict(params=embed_params, lr=0.6),
-    dict(params=scalar_params, lr=0.04),
+    dict(params=head_params, lr=0.0022),
+    dict(params=embed_params, lr=0.06),
+    dict(params=scalar_params, lr=0.004),
 ]
 optimizer1 = torch.optim.Adam(
     adam_params, betas=(0.8, 0.95), eps=1e-10, fused=True
