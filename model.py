@@ -133,9 +133,9 @@ class Block(nn.Module):
 
     def forward(self, x: Tensor, v_residual: Tensor, x0: Tensor, pos_id: Tensor, block_mask: BlockMask):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
-        x1, v_residual = self.attn(F.rms_norm(x, (x.size(-1),)), v_residual, pos_id, block_mask)
+        x1, v_residual = self.attn(norm(x), v_residual, pos_id, block_mask)
         x = x + x1
-        x = x + self.mlp(F.rms_norm(x, (x.size(-1),)))
+        x = x + self.mlp(norm(x))
         return x, v_residual
 
 

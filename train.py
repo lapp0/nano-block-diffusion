@@ -73,10 +73,8 @@ def distributed_data_generator(
     while True:
         if pos + batch_size >= len(tokens):
             tokens, pos = _load_data_shard(next(file_iter)), 0
-        buf = tokens[pos + rank * local_bs :][: local_bs + 1]
-        inputs = buf[:-1].to(
-            device="cuda", dtype=torch.int32, non_blocking=True
-        )
+        buf = tokens[pos + rank * local_bs:][:local_bs]
+        inputs = buf.to(device="cuda", dtype=torch.int64, non_blocking=True)
         pos += batch_size
         yield inputs
 
