@@ -1,63 +1,55 @@
-# Sample-Efficient NanoGPT
+# Nano Block Diffusion
+
+Simple codebase for training a [Block Diffusion](https://arxiv.org/abs/2503.09573) model from scratch in a few hours.
+
+We provide a trainer which runs on consumer hardware (e.g. 1x3090) and server clusters (e.g. 8xH100).
+
 
 ## Overview
-Sample-Efficient NanoGPT is a fork of [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt). The goal is to train a language model that achieves ≤ 3.28 cross-entropy loss on the FineWeb validation set. No specific hardware requirements.
+This repo implements a simple Block Diffusion model, trainer, and inference script. This serves as a starting point for researching improvements integration into existing models.
 
-**Why sample efficiency?**
-Maximizing learning per token uncovers new architectures and training methods that current hardware and kernels don’t yet optimize. These insights steer future hardware and kernel design to leverage these advancements.
+Executive summary of the core difference between a standard autoregressive "GPT-style" transformer and a Block Diffusion Transformer:
+- **Block Diffusion:** Rather than predicting just the next token, the model masks out the next `B` tokens in one go and learns to reconstruct entire blocks from their surrounding context.
+- **Attention Rules:** Full attention within each block; noisy blocks may causally attend to preceding clean blocks; clean blocks obey standard causal masking.
+- **Loss Function:** Cross-entropy on masked tokens. Each loss term is weighted by the inverse of its block’s noise level and averaged.
 
-## Running the Current Record
-**Setup**
+In this simple [commit](https://github.com/lapp0/nano-block-diffusion/commit/dcda272db1606ac41623cce5f8dec7b1b8215f51) we apply all necessary changes to convert a GPT model into a Block Diffusion model.
+
+_Inspired by Andrej Karpathy's [nanoGPT](https://github.com/karpathy/nanoGPT) and incorporates improved [optimizers](https://github.com/KellerJordan/Muon) model architecture and from [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt)._
+
+
+## Training Instructions
+**Setup** code, packages, and data.
 ```bash
-git clone https://github.com/lapp0/sample-efficient-nanogpt.git
-cd sample-efficient-nanogpt
+git clone https://github.com/lapp0/nano-block-diffusion.git && cd nano-block-diffusion
 pip install -r requirements.txt
-pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --upgrade
-python data/cached_fineweb10B.py 10
+pip install --pre torch==2.8.0.dev20250523+cu126 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu126 --upgrade
+python data/cached_finewebedu10B.py 10  # download input data
 ```
 
-**Run**
+**Run** using all available GPUs
 ```bash
-export N_GPU=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
-torchrun --standalone --nproc_per_node=$N_GPU train_gpt.py
+torchrun --standalone --nproc_per_node=$(nvidia-smi -L | wc -l) train.py
 ```
 
-## World Record History
+## Training Records
 
-| Implementation          | Tokens    | Date       | Note                                                                |
-|-------------------------|-----------|------------|---------------------------------------------------------------------|
-| llm.c (baseline)        | 10,486 M  | 05/28/2024 | Uses tied embeddings, only 124M parameters                          |
-| ~~modded-nanogpt~~      | ~~696 M~~ | 05/25/2025 | Invalid, uses value embeddings, increasing total parameters to 201M |
-| No Value Embedding      | 747.11M   | 07/06/2025 | Remove value embeddings, train for 1900 steps                       |
-| Recurrent Intermediates | 668.47M   | 07/07/2025 | Repeat layers in forward pass                                       |
+| Implementation                                                   | 1xH100 Train Time | Train Tokens | Date       | Note                           |
+|------------------------------------------------------------------|-------------------|--------------|------------|--------------------------------|
+| Paper[^1]                                                        |                   | 65,000M      | 05/17/2025 | Table 3, 30.60 PPL on **LM1B** |
+| Nano Block Diffusion v0                                          |                   |              | 07/09/2025 | Original release               |
+| [New Record](https://github.com/lapp0/nano-block-diffusion/pulls |                   |              |            |                                |
 
-## Rules
+PRs which improve the models training performance are encouraged. Block Diffusion models are new and underexplored.
 
-* **Parameter limit**: ≤ 162M parameters (including embeddings). Inactive parameters count towards the total.
-* **Target**: achieve ≤ 3.28 cross-entropy loss on FineWeb val.
+**New Record Rules**
+* **Parameter limit**: Use ≤ 162M parameters (including embeddings).
+* **Target**: Achieve ≤ 3.44 cross-entropy loss on FineWebEdu validation set.
 * **Data**: Must use FineWeb dataset. Sample order are fixed. Samples cannot be repeated. Sample size per batch may vary.
-* **Time**: Must train on 8xH100 in fewer than 30 minutes
-
-## Records
-
-### No Value Embedding
-Remove value embeddings from modded-nanogpt in order to comply with 162M parameter limit. Requires longer training run of 1900 steps
-
-### Recurrent Intermediate Layers
-[logs](logs/83dda42f-c076-49b7-8933-457f56f0f4b0.txt)
-
-Rather than the forward pass looping through layers [0, 1, ..., 11], instead layers are looped. Specifically, the pattern is
-```
-0, 1, 2,
-3, 4, 5, 6, 7, 8,
-3, 4, 5, 6, 7, 8,
-3, 4, 5, 6, 7, 8,
-3, 4, 5, 6, 7, 8,
-9, 10, 11
-```
-
-`step:1700/1700 val_loss:3.2701 train_time:6555576ms step_avg:3856.22ms tokens:668.47M`
+* **Objective:** Must retain the same objective function and retain 16 token denoising block.
 
 ## Citations
 
-\[1]: [Keller Jordan et al. *modded-nanogpt: Speedrunning the NanoGPT baseline*.](https://github.com/KellerJordan/modded-nanogpt/)
+[^1]: [Arriola, M., Gokaslan, A., Chiu, J.T., Yang, Z., Qi, Z., Han, J., Sahoo, S.S., Kuleshov, V. (2025). Block Diffusion: Interpolating Between Autoregressive and Diffusion Language Models. arXiv preprint arXiv:2503.09573.](https://arxiv.org/abs/2503.09573)
+[^2]: [Keller Jordan et al. *modded-nanogpt: Speedrunning the NanoGPT baseline*.](https://github.com/KellerJordan/modded-nanogpt/)
+- Note: many improvements in `model.py` are from modded-nanogpt, however, comments attributing the discovering author have been removed to keep the codebase clean. To view each improvements discovering author comment, see [modded-nanogpt's train_gpt.py](https://github.com/KellerJordan/modded-nanogpt/blob/master/train_gpt.py)
