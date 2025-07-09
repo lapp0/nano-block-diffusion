@@ -33,6 +33,7 @@ class Hyperparameters:
     train_seq_len = 16 * 1024
     val_seq_len = 64 * 1024
     grad_accum_steps_per_device = (8 // int(os.environ["WORLD_SIZE"]))
+    num_iterations = 5000
     cooldown_frac = 0.4
     vocab_size = 50_257
     val_loss_every = 125
