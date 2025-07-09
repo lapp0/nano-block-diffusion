@@ -27,8 +27,8 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 @dataclass
 class Hyperparameters:
-    train_files = "data/fineweb10B/fineweb_train_*.bin"
-    val_files = "data/fineweb10B/fineweb_val_*.bin"
+    train_files = "data/finewebedu10B/finewebedu_train_*.bin"
+    val_files = "data/finewebedu10B/finewebedu_val_*.bin"
     val_tokens = 10_485_760
     train_seq_len = 16 * 1024
     val_seq_len = 64 * 1024
