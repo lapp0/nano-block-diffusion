@@ -235,18 +235,14 @@ for step in range(args.num_iterations + 1):
         val_loss = evaluate(model, val_loader, val_steps)
         dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
 
-        num_toks = (
-            step
-            * args.grad_accum_steps_per_device
-            * args.train_seq_len
-            * world_size
-        )
+        num_toks = step * args.grad_accum_steps_per_device \
+            * args.train_seq_len * world_size
         print0(
             f"step:{step}/{args.num_iterations} "
             f"val_loss:{val_loss:.4f} "
             f"train_time:{training_time_ms:.0f}ms "
-            f"step_avg:{training_time_ms/max(step,1):.2f}ms "
-            f"tokens:{num_toks/1e6:.2f}M",
+            f"step_avg:{training_time_ms / max(step, 1):.2f}ms "
+            f"tokens:{num_toks / 1e6:.2f}M",
             console=True,
         )
         model.train()
@@ -271,17 +267,17 @@ for step in range(args.num_iterations + 1):
 
     approx_time = training_time_ms + 1000 * (time.perf_counter() - t0)
     print0(
-        f"step:{step+1}/{args.num_iterations} "
+        f"step:{step + 1}/{args.num_iterations} "
         f"train_time:{approx_time:.0f}ms "
-        f"step_avg:{approx_time/(step+1):.2f}ms",
+        f"step_avg:{approx_time / (step + 1):.2f}ms",
         console=True,
     )
 
 print0(
     f"peak memory allocated: "
-    f"{torch.cuda.max_memory_allocated()//1024//1024} MiB "
+    f"{torch.cuda.max_memory_allocated() // 1024 // 1024} MiB "
     f"reserved: "
-    f"{torch.cuda.max_memory_reserved()//1024//1024} MiB",
+    f"{torch.cuda.max_memory_reserved() // 1024 // 1024} MiB",
     console=True,
 )
 dist.destroy_process_group()
