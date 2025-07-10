@@ -6,7 +6,7 @@ We provide a trainer which runs on consumer hardware (e.g. 1x3090) and server cl
 
 
 ## Overview
-This repo implements a simple Block Diffusion model, trainer, and inference script. This serves as a starting point for researching improvements integration into existing models.
+This repo implements a simple Block Diffusion model, trainer, and inference script. This serves as a starting point for researching improvements and integrations into existing models.
 
 Executive summary of the core difference between a standard autoregressive "GPT-style" transformer and a Block Diffusion Transformer:
 - **Block Diffusion:** Rather than predicting just the next token, the model masks out the next `B` tokens in one go and learns to reconstruct entire blocks from their surrounding context.
