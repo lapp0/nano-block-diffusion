@@ -179,16 +179,16 @@ scalar_params = [p for p in model.parameters() if p.ndim < 2]
 head_params = [model.lm_head.weight]
 
 adam_params = [
-    dict(params=head_params, lr=0.0022),
+    dict(params=head_params, lr=0.0011),
     dict(params=embed_params, lr=0.06),
-    dict(params=scalar_params, lr=0.004),
+    dict(params=scalar_params, lr=0.04),
 ]
 optimizer1 = torch.optim.Adam(
     adam_params, betas=(0.8, 0.95), eps=1e-10, fused=True
 )
 optimizer2 = Muon(
     hidden_matrix_params,
-    lr=0.05,
+    lr=0.025,
     momentum=0.95,
 )
 optimizers = [optimizer1, optimizer2]
