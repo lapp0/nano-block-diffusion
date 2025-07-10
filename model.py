@@ -153,12 +153,9 @@ class BlockGPT(nn.Module):
         assert len(self.blocks) % 2 == 0
         self.skip_w = nn.Parameter(torch.ones(len(self.blocks) // 2))
 
-    def create_blockmask(self, doc_id: Tensor, pos_id: Tensor):
+    def create_blockmask(self, doc_id: Tensor, block_id: Tensor):
         """BlockMask for attn rules from https://arxiv.org/pdf/2503.09573 section 3.1"""
         L = len(doc_id)
-
-        block_id = pos_id // self.config.diffusion_block_size + doc_id * L
-        block_id = torch.cumsum(block_id != block_id.roll(1, 0), 0) - 1
 
         block_id, doc_id = block_id.repeat(2), doc_id.repeat(2)
         noisy = torch.arange(2 * L, device=doc_id.device) < L
@@ -184,12 +181,15 @@ class BlockGPT(nn.Module):
         doc_id = (input_seq == self.config.bos_id).cumsum(0)
         p = torch.arange(input_seq.size(0), device=input_seq.device)
         pos_id = p - torch.where(input_seq == self.config.bos_id, p, -1).cummax(0).values
-        block_mask = self.create_blockmask(doc_id, pos_id)
+        block_id = pos_id // self.config.diffusion_block_size + doc_id * len(input_seq)
+        block_id = torch.cumsum(block_id != block_id.roll(1, 0), 0) - 1
+
+        block_mask = self.create_blockmask(doc_id, block_id)
 
         # Apply noise to sequence
         noise_range = (self.config.t_lower, self.config.t_upper) if self.training else (0.0, 1.0)
         rand = torch.rand_like(input_seq, dtype=torch.float32)
-        t = torch.empty_like(rand).uniform_(*noise_range)[doc_id]
+        t = torch.empty_like(rand).uniform_(*noise_range)[block_id]
         noisy_seq = input_seq.masked_fill(rand >= (1 - t), self.config.mask_id)
 
         # Concat noisy + clean into seq and repeat pos_ids
