@@ -38,7 +38,7 @@ torchrun --standalone --nproc_per_node=$(nvidia-smi -L | wc -l) train.py
 
 | Implementation                                                   | 1xH100 Train Time | Train Tokens | Date       | Note                           |
 |------------------------------------------------------------------|-------------------|--------------|------------|--------------------------------|
-| Paper[^1]                                                        |                   | 65,000M      | 05/17/2025 | Table 3, 30.60 PPL on **LM1B** |
+| Paper[1]                                                        |                   | 65,000M      | 05/17/2025 | Table 3, 30.60 PPL on **LM1B** |
 | Nano Block Diffusion v0                                          |                   |              | 07/09/2025 | Original release               |
 | [New Record](https://github.com/lapp0/nano-block-diffusion/pulls) |                   |              |            |                                |
 
@@ -57,7 +57,9 @@ Optimizer and architectural enhancements borrowed from [Muon](https://github.com
 
 ### References
 
-[^1]: [Arriola, M., Gokaslan, A., Chiu, J.T., Yang, Z., Qi, Z., Han, J., Sahoo, S.S., Kuleshov, V. (2025). Block Diffusion: Interpolating Between Autoregressive and Diffusion Language Models. arXiv preprint arXiv:2503.09573.](https://arxiv.org/abs/2503.09573)
+- [1]: [Arriola, M., Gokaslan, A., Chiu, J.T., Yang, Z., Qi, Z., Han, J., Sahoo, S.S., Kuleshov, V. (2025). Block Diffusion: Interpolating Between Autoregressive and Diffusion Language Models. arXiv preprint arXiv:2503.09573.](https://arxiv.org/abs/2503.09573)
+- [2]: [Keller Jordan et al. *modded-nanogpt: Speedrunning the NanoGPT baseline*.](https://github.com/KellerJordan/modded-nanogpt/)
+  - Note: many improvements in `model.py` are from modded-nanogpt, however, comments attributing the discovering author have been removed to keep the codebase clean. To view each improvements discovering author comment, see [modded-nanogpt's train_gpt.py](https://github.com/KellerJordan/modded-nanogpt/blob/master/train_gpt.py)
 
-[^2]: [Keller Jordan et al. *modded-nanogpt: Speedrunning the NanoGPT baseline*.](https://github.com/KellerJordan/modded-nanogpt/)
-- Note: many improvements in `model.py` are from modded-nanogpt, however, comments attributing the discovering author have been removed to keep the codebase clean. To view each improvements discovering author comment, see [modded-nanogpt's train_gpt.py](https://github.com/KellerJordan/modded-nanogpt/blob/master/train_gpt.py)
+
+
