@@ -216,8 +216,6 @@ class BlockGPT(nn.Module):
         mask = (noisy_seq == self.config.mask_id)
         targets = torch.where(mask, input_seq, torch.full_like(input_seq, -100))
         losses = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), reduction='none')
-        if self.training:
-            weights = (1.0 / (t + 1e-4)).type_as(logits)
-            return (losses * weights * mask).sum() / mask.sum()
-        else:
-            return (losses * mask).sum() / mask.sum()
+        weights = (1.0 / (t + 1e-3)).type_as(logits)
+        loss = (losses * weights * mask).sum() / input_seq.size(0)
+        return loss
