@@ -18,7 +18,7 @@ class BlockGPTConfig:
     num_layers: int = 12
     num_heads: int = 6
     model_dim: int = 768
-    max_seq_len: int = int(2**15)
+    max_seq_len: int = int(2**16)
     head_dim: int = 128
     intermediate_dim: int | None = None
     diffusion_block_size: int = 16
